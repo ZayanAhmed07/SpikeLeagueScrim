@@ -20,7 +20,7 @@ INTENTS.members = True
 bot = commands.Bot(command_prefix="!", intents=INTENTS)
 DB_FILE = "scrims.db"
 
-VALORANT_MAPS = ["Ascent", "Bind", "Haven", "Icebox", "Split", "Lotus", "Breeze"]
+VALORANT_MAPS = ["Ascent", "Bind", "Haven", "Icebox", "Split", "Lotus","Abyss","Fracture","Sunset","Pearl" "Corrode","Breeze"]
 VALORANT_RANKS = ["Radiant", "Immortal", "Ascendant", "Diamond", "Platinum", "Gold", "Silver", "Bronze", "Iron"]
 VALORANT_SERVERS = ["Dubai", "Bahrain"]
 
@@ -392,6 +392,14 @@ async def on_ready():
     print(f"✅ Logged in as {bot.user}")
     init_db()
     print("✅ Database initialized!")
+    
+    # Set bot status - Green with "Playing SpikeLeague"
+    await bot.change_presence(
+        activity=discord.Game(name="SpikeLeague"),
+        status=discord.Status.online
+    )
+    print("✅ Bot status set to: Playing SpikeLeague")
+    
     try:
         await bot.tree.sync()
         print("✅ Slash commands synced successfully!")
