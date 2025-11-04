@@ -22,7 +22,7 @@ DB_FILE = "scrims.db"
 
 VALORANT_MAPS = ["Ascent", "Bind", "Haven", "Icebox", "Split", "Lotus", "Abyss", "Fracture", "Sunset", "Pearl", "Corrode", "Breeze"]
 VALORANT_RANKS = ["Radiant", "Immortal", "Ascendant", "Diamond", "Platinum", "Gold", "Silver", "Bronze", "Iron"]
-VALORANT_SERVERS = ["Dubai", "Bahrain"]
+VALORANT_SERVERS = ["Dubai", "Bahrain","Mumbai"]
 
 # -------------------- Database Setup --------------------
 def init_db():
