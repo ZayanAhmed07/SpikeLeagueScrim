@@ -20,7 +20,7 @@ INTENTS.members = True
 bot = commands.Bot(command_prefix="!", intents=INTENTS)
 DB_FILE = "scrims.db"
 
-VALORANT_MAPS = ["Ascent", "Bind", "Haven", "Icebox", "Split", "Lotus","Abyss","Fracture","Sunset","Pearl" "Corrode","Breeze"]
+VALORANT_MAPS = ["Ascent", "Bind", "Haven", "Icebox", "Split", "Lotus", "Abyss", "Fracture", "Sunset", "Pearl", "Corrode", "Breeze"]
 VALORANT_RANKS = ["Radiant", "Immortal", "Ascendant", "Diamond", "Platinum", "Gold", "Silver", "Bronze", "Iron"]
 VALORANT_SERVERS = ["Dubai", "Bahrain"]
 
@@ -80,6 +80,7 @@ def get_db_connection():
 # -------------------- Database Operations --------------------
 def create_scrim(scrim_data: Dict) -> bool:
     """Insert a new scrim into the database."""
+    conn = None
     try:
         conn = get_db_connection()
         cursor = conn.cursor()
@@ -105,15 +106,18 @@ def create_scrim(scrim_data: Dict) -> bool:
         ))
         
         conn.commit()
-        conn.close()
         return True
     except Exception as e:
         print(f"Error creating scrim: {e}")
         traceback.print_exc()
         return False
+    finally:
+        if conn:
+            conn.close()
 
 def get_scrim_by_id(scrim_id: int) -> Optional[Dict]:
     """Retrieve a scrim by its message ID."""
+    conn = None
     try:
         conn = get_db_connection()
         cursor = conn.cursor()
@@ -130,18 +134,20 @@ def get_scrim_by_id(scrim_id: int) -> Optional[Dict]:
             scrim['maps'] = scrim['maps'].split(',') if scrim['maps'] else []
             scrim['ranks'] = scrim['ranks'].split(',') if scrim['ranks'] else []
             scrim['verified_by'] = verified_by
-            conn.close()
             return scrim
         
-        conn.close()
         return None
     except Exception as e:
         print(f"Error getting scrim: {e}")
         traceback.print_exc()
         return None
+    finally:
+        if conn:
+            conn.close()
 
 def update_scrim_status(scrim_id: int, status: str, booked_by: Optional[int] = None) -> bool:
     """Update a scrim's status and optionally who booked it."""
+    conn = None
     try:
         conn = get_db_connection()
         cursor = conn.cursor()
@@ -158,15 +164,18 @@ def update_scrim_status(scrim_id: int, status: str, booked_by: Optional[int] = N
             )
         
         conn.commit()
-        conn.close()
         return True
     except Exception as e:
         print(f"Error updating scrim status: {e}")
         traceback.print_exc()
         return False
+    finally:
+        if conn:
+            conn.close()
 
 def add_verification(scrim_id: int, user_id: int) -> bool:
     """Add a verification record for a scrim."""
+    conn = None
     try:
         conn = get_db_connection()
         cursor = conn.cursor()
@@ -176,17 +185,20 @@ def add_verification(scrim_id: int, user_id: int) -> bool:
             VALUES (?, ?, ?)
         ''', (scrim_id, user_id, time.time()))
         
-        affected = cursor.rowcount
         conn.commit()
-        conn.close()
+        affected = cursor.rowcount
         return affected > 0
     except Exception as e:
         print(f"Error adding verification: {e}")
         traceback.print_exc()
         return False
+    finally:
+        if conn:
+            conn.close()
 
 def get_verification_count(scrim_id: int) -> int:
     """Get the number of verifications for a scrim."""
+    conn = None
     try:
         conn = get_db_connection()
         cursor = conn.cursor()
@@ -194,15 +206,18 @@ def get_verification_count(scrim_id: int) -> int:
         cursor.execute('SELECT COUNT(*) as count FROM verifications WHERE scrim_id = ?', (scrim_id,))
         count = cursor.fetchone()['count']
         
-        conn.close()
         return count
     except Exception as e:
         print(f"Error getting verification count: {e}")
         traceback.print_exc()
         return 0
+    finally:
+        if conn:
+            conn.close()
 
 def user_has_verified(scrim_id: int, user_id: int) -> bool:
     """Check if a user has already verified a scrim."""
+    conn = None
     try:
         conn = get_db_connection()
         cursor = conn.cursor()
@@ -213,15 +228,18 @@ def user_has_verified(scrim_id: int, user_id: int) -> bool:
         )
         count = cursor.fetchone()['count']
         
-        conn.close()
         return count > 0
     except Exception as e:
         print(f"Error checking verification: {e}")
         traceback.print_exc()
         return False
+    finally:
+        if conn:
+            conn.close()
 
-def get_active_scrim_for_user(user_id: int) -> Optional[Dict]:
-    """Get an active (open/pending/booked) scrim for a user."""
+def get_any_active_scrim_for_user(user_id: int) -> Optional[Dict]:
+    """Get ANY active scrim for a user (open/pending/booked) - blocks new scrim creation."""
+    conn = None
     try:
         conn = get_db_connection()
         cursor = conn.cursor()
@@ -234,7 +252,6 @@ def get_active_scrim_for_user(user_id: int) -> Optional[Dict]:
         ''', (user_id,))
         
         row = cursor.fetchone()
-        conn.close()
         
         if row:
             scrim = dict(row)
@@ -246,9 +263,43 @@ def get_active_scrim_for_user(user_id: int) -> Optional[Dict]:
         print(f"Error getting active scrim: {e}")
         traceback.print_exc()
         return None
+    finally:
+        if conn:
+            conn.close()
+
+def get_open_scrim_for_user(user_id: int) -> Optional[Dict]:
+    """Get only OPEN scrim for a user - used for cancellation."""
+    conn = None
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        
+        cursor.execute('''
+            SELECT * FROM scrims 
+            WHERE requester_id = ? AND status = 'open'
+            ORDER BY created_at DESC
+            LIMIT 1
+        ''', (user_id,))
+        
+        row = cursor.fetchone()
+        
+        if row:
+            scrim = dict(row)
+            scrim['maps'] = scrim['maps'].split(',') if scrim['maps'] else []
+            scrim['ranks'] = scrim['ranks'].split(',') if scrim['ranks'] else []
+            return scrim
+        return None
+    except Exception as e:
+        print(f"Error getting open scrim: {e}")
+        traceback.print_exc()
+        return None
+    finally:
+        if conn:
+            conn.close()
 
 def get_expired_scrims(expiry_time: float) -> List[Dict]:
     """Get all open scrims that should be expired."""
+    conn = None
     try:
         conn = get_db_connection()
         cursor = conn.cursor()
@@ -260,7 +311,6 @@ def get_expired_scrims(expiry_time: float) -> List[Dict]:
         ''', (cutoff_time,))
         
         rows = cursor.fetchall()
-        conn.close()
         
         scrims = []
         for row in rows:
@@ -274,12 +324,16 @@ def get_expired_scrims(expiry_time: float) -> List[Dict]:
         print(f"Error getting expired scrims: {e}")
         traceback.print_exc()
         return []
+    finally:
+        if conn:
+            conn.close()
 
 def expire_user_scrims(user_ids: List[int], exclude_id: Optional[int] = None) -> List[Dict]:
     """Expire all open scrims for given users, optionally excluding one scrim."""
     if not user_ids:
         return []
     
+    conn = None
     try:
         conn = get_db_connection()
         cursor = conn.cursor()
@@ -309,13 +363,14 @@ def expire_user_scrims(user_ids: List[int], exclude_id: Optional[int] = None) ->
             cursor.execute('UPDATE scrims SET status = ? WHERE id = ?', ('expired', scrim['id']))
         
         conn.commit()
-        conn.close()
-        
         return expired_scrims
     except Exception as e:
         print(f"Error expiring user scrims: {e}")
         traceback.print_exc()
         return []
+    finally:
+        if conn:
+            conn.close()
 
 # -------------------- Helper Functions --------------------
 async def safe_fetch_message(channel_id, message_id):
@@ -501,7 +556,7 @@ class ScrimView(discord.ui.View):
 
     async def _show_rank_select(self, interaction: discord.Interaction):
         options = [discord.SelectOption(label=r, value=r) for r in VALORANT_RANKS]
-        select = discord.ui.Select(placeholder="Select ranks (max 3)", min_values=1, max_values=3, options=options)
+        select = discord.ui.Select(placeholder="Select ranks (max 2)", min_values=1, max_values=2, options=options)
 
         async def callback(i: discord.Interaction):
             if i.user.id != self.user_id:
@@ -710,7 +765,7 @@ class MatchVerificationView(discord.ui.View):
         self.requester_id = requester_id
         self.challenger_id = challenger_id
 
-    @discord.ui.button(label="✅ Match Completed", style=discord.ButtonStyle.success)
+    @discord.ui.button(label="Click after Match Completed", style=discord.ButtonStyle.success)
     async def match_completed(self, interaction: discord.Interaction, button: discord.ui.Button):
         if interaction.user.id not in {self.requester_id, self.challenger_id}:
             return await interaction.response.send_message("You are not part of this match!", ephemeral=True)
@@ -771,12 +826,23 @@ class MatchVerificationView(discord.ui.View):
 @bot.tree.command(name="scrim", description="Create a Valorant scrim request")
 async def create_scrim_cmd(interaction: discord.Interaction):
     user_id = interaction.user.id
-    active = get_active_scrim_for_user(user_id)
+    
+    # Check if user has ANY active scrim (open, pending, or booked)
+    active = get_any_active_scrim_for_user(user_id)
     
     if active:
+        status_msg = {
+            'open': 'Your scrim is currently open and waiting to be booked',
+            'pending': 'Your scrim booking is pending (waiting for ready check confirmation)',
+            'booked': 'Your scrim is booked and waiting for match completion'
+        }
+        
         return await interaction.response.send_message(
-            f"⚠️ You already have an active scrim request (Status: {active['status']}). "
-            "Cancel or wait for it to finish before creating a new one.", 
+            f"⚠️ **You already have an active scrim!**\n\n"
+            f"**Status:** {active['status'].capitalize()}\n"
+            f"**Details:** {status_msg.get(active['status'], 'In progress')}\n\n"
+            f"❌ You cannot create a new scrim until your current one is completed (status: played) or cancelled.\n"
+            f"💡 Use `/my_scrim` to view details or `/cancel_scrim` to cancel (only if status is 'open').", 
             ephemeral=True
         )
 
@@ -786,16 +852,24 @@ async def create_scrim_cmd(interaction: discord.Interaction):
 @bot.tree.command(name="cancel_scrim", description="Cancel your active scrim request")
 async def cancel_scrim(interaction: discord.Interaction):
     user_id = interaction.user.id
-    active = get_active_scrim_for_user(user_id)
+    
+    # Check for open scrim only
+    active = get_open_scrim_for_user(user_id)
     
     if not active:
-        return await interaction.response.send_message("❌ You have no active scrim to cancel.", ephemeral=True)
-    
-    if active['status'] != 'open':
-        return await interaction.response.send_message(
-            f"❌ Your scrim is currently {active['status']} and cannot be cancelled.", 
-            ephemeral=True
-        )
+        # Check if they have a non-open active scrim
+        any_active = get_any_active_scrim_for_user(user_id)
+        if any_active:
+            return await interaction.response.send_message(
+                f"❌ Your scrim is currently **{any_active['status']}** and cannot be cancelled.\n"
+                f"Only scrims with 'open' status can be cancelled.", 
+                ephemeral=True
+            )
+        else:
+            return await interaction.response.send_message(
+                "❌ You have no open scrim to cancel.", 
+                ephemeral=True
+            )
 
     # Update status to cancelled
     update_scrim_status(active['id'], 'cancelled')
@@ -817,12 +891,22 @@ async def cancel_scrim(interaction: discord.Interaction):
 @bot.tree.command(name="my_scrim", description="View your current active scrim")
 async def my_scrim(interaction: discord.Interaction):
     user_id = interaction.user.id
-    active = get_active_scrim_for_user(user_id)
+    active = get_any_active_scrim_for_user(user_id)
     
     if not active:
         return await interaction.response.send_message("❌ You don't have any active scrims.", ephemeral=True)
     
-    embed = discord.Embed(title="Your Active Scrim", color=0x5865F2)
+    # Status color coding
+    status_colors = {
+        'open': 0x00FF00,      # Green
+        'pending': 0xFFFF00,   # Yellow
+        'booked': 0x0099FF     # Blue
+    }
+    
+    embed = discord.Embed(
+        title="Your Active Scrim", 
+        color=status_colors.get(active['status'], 0x5865F2)
+    )
     embed.add_field(name="Team", value=active['team_name'], inline=True)
     embed.add_field(name="Format", value=active['format'], inline=True)
     embed.add_field(name="Status", value=active['status'].capitalize(), inline=True)
@@ -837,6 +921,14 @@ async def my_scrim(interaction: discord.Interaction):
     created_time = int(active['created_at'])
     embed.set_footer(text=f"Created")
     embed.timestamp = datetime.fromtimestamp(created_time)
+    
+    # Add helpful footer based on status
+    if active['status'] == 'open':
+        embed.description = "✅ Your scrim is open and waiting to be booked."
+    elif active['status'] == 'pending':
+        embed.description = "⏳ Waiting for ready check confirmation from both parties."
+    elif active['status'] == 'booked':
+        embed.description = "🎮 Your scrim is booked! Complete the match and both teams must verify."
     
     await interaction.response.send_message(embed=embed, ephemeral=True)
 
@@ -871,10 +963,13 @@ async def on_command_error(ctx, error):
 @bot.tree.error
 async def on_app_command_error(interaction: discord.Interaction, error):
     """Handle slash command errors."""
-    if interaction.response.is_done():
-        await interaction.followup.send("❌ An error occurred while processing your command.", ephemeral=True)
-    else:
-        await interaction.response.send_message("❌ An error occurred while processing your command.", ephemeral=True)
+    try:
+        if interaction.response.is_done():
+            await interaction.followup.send("❌ An error occurred while processing your command.", ephemeral=True)
+        else:
+            await interaction.response.send_message("❌ An error occurred while processing your command.", ephemeral=True)
+    except Exception:
+        pass
     print(f"App command error: {error}")
     traceback.print_exc()
 
